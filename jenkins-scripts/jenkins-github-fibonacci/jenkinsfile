@@ -20,22 +20,5 @@ pipeline {
                 bat 'if exist .\\scripts\\fibonacci.ps1 (echo Script found) else (echo Script not found && exit 1)'
             }
         }
-        stage('Relative path') {
-            steps {
-                bat "powershell -ExecutionPolicy Bypass -File .\\scripts\\fibonacci.ps1 -N ${env.NUMBER}"
-            }
-        }
-        stage('Full path') {
-            steps {
-                bat "powershell -ExecutionPolicy Bypass -File ${env.WORKSPACE}\\scripts\\fibonacci.ps1 -N ${env.NUMBER}"
-            }
-        }
-        stage('Change directory') {
-            steps {
-                dir("${env.WORKSPACE}\\scripts"){
-                    bat "powershell -ExecutionPolicy Bypass -File .\\fibonacci.ps1 -N ${env.NUMBER}"
-                }
-            }
-        }
     }
 }
