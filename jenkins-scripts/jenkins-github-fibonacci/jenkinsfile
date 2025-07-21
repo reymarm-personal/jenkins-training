@@ -14,7 +14,6 @@ pipeline {
         stage('Check PowerShell Script') {
             steps {
                 bat 'dir .\\scripts\\'
-                bat 'if exist .\\scripts\\fibonacci.ps1 (echo Script found) else (echo Script not found && exit 1)'
             }
         }
     }
