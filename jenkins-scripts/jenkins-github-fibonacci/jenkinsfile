@@ -3,7 +3,7 @@ pipeline {
     parameters {
         choice(name: 'NUMBER',
             choices: [10,20,30,40,50,60,70,80,90],
-            description: 'Select the value for F(n) for the Fibonnai sequence.')
+            description: 'Select the value for F(n) for the Fibonacci sequence.')
     }
     options {
         buildDiscarder(logRotator(daysToKeepStr: '10', numToKeepStr: '10'))
@@ -14,25 +14,26 @@ pipeline {
         cron '@midnight'
     }
     stages {
-        stage('Make executable') {
+        stage('Check PowerShell Script') {
             steps {
-                sh('chmod +x ./scripts/fibonacci.sh')
+                // PowerShell scripts don't need chmod, but we can verify the file exists
+                bat('if exist .\\scripts\\fibonacci.ps1 (echo Script found) else (echo Script not found && exit 1)')
             }
         }
         stage('Relative path') {
             steps {
-                sh("./scripts/fibonacci.sh ${env.NUMBER}")
+                bat("powershell -ExecutionPolicy Bypass -File .\\scripts\\fibonacci.ps1 -N ${env.NUMBER}")
             }
         }
         stage('Full path') {
             steps {
-                sh("${env.WORKSPACE}/scripts/fibonacci.sh ${env.NUMBER}")
+                bat("powershell -ExecutionPolicy Bypass -File ${env.WORKSPACE}\\scripts\\fibonacci.ps1 -N ${env.NUMBER}")
             }
         }
         stage('Change directory') {
             steps {
-                dir("${env.WORKSPACE}/scripts"){
-                    sh("./fibonacci.sh ${env.NUMBER}")
+                dir("${env.WORKSPACE}\\scripts"){
+                    bat("powershell -ExecutionPolicy Bypass -File .\\fibonacci.ps1 -N ${env.NUMBER}")
                 }
             }
         }
