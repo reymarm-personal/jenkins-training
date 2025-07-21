@@ -17,7 +17,7 @@ pipeline {
         stage('Check PowerShell Script') {
             steps {
                  bat 'echo "this is a report"'
-                 bat 'dir .\\scripts\\'
+                 bat 'echo "this is a report" > report.txt'
             }
         }
     }
