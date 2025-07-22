@@ -12,30 +12,28 @@ pipeline {
         timeout(time: 12, unit: 'HOURS')
         timestamps()
     }
-    triggers {
-        cron '@midnight'
-    }
+
     stages {
         stage('Make executable') {
             steps {
-                // Windows doesn't need chmod, but we can verify the file exists
-                bat 'if exist jenkins-scripts\\jenkins-github-fibonacci\\scripts\\fibonacci.ps1 (echo File exists) else (echo File not found && exit 1)'
+                // Verify the PowerShell script exists
+                powershell 'if (Test-Path "jenkins-scripts\\jenkins-github-fibonacci\\scripts\\fibonacci.ps1") { Write-Host "File exists" } else { Write-Host "File not found"; exit 1 }'
             }
         }
         stage('Relative path') {
             steps {
-                bat "jenkins-scripts\\jenkins-github-fibonacci\\scripts\\fibonacci.ps1 ${env.NUMBER}"
+                powershell "jenkins-scripts\\jenkins-github-fibonacci\\scripts\\fibonacci.ps1 ${env.NUMBER}"
             }
         }
         stage('Full path') {
             steps {
-                bat "\"%WORKSPACE%\\jenkins-scripts\\jenkins-github-fibonacci\\scripts\\fibonacci.ps1" ${env.NUMBER}"
+                powershell "\"%WORKSPACE%\\jenkins-scripts\\jenkins-github-fibonacci\\scripts\\fibonacci.ps1\" ${env.NUMBER}"
             }
         }
         stage('Change directory') {
             steps {
-                dir("${env.WORKSPACE}\\jenkins-scripts\\jenkins-github-fibonacci\\scripts\\") {
-                    bat "fibonacci.ps1 ${env.NUMBER}"
+                dir("${env.WORKSPACE}\\jenkins-scripts\\jenkins-github-fibonacci\\scripts") {
+                    powershell ".\\fibonacci.ps1 ${env.NUMBER}"
                 }
             }
         }
