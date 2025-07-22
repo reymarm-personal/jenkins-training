@@ -19,23 +19,23 @@ pipeline {
         stage('Make executable') {
             steps {
                 // Windows doesn't need chmod, but we can verify the file exists
-                bat 'if exist jenkins-scripts\\jenkins-github-fibonacci\\fibonacci.bat (echo File exists) else (echo File not found && exit 1)'
+                bat 'if exist jenkins-scripts\\jenkins-github-fibonacci\\scripts\\fibonacci.ps1 (echo File exists) else (echo File not found && exit 1)'
             }
         }
         stage('Relative path') {
             steps {
-                bat "jenkins-scripts\\jenkins-github-fibonacci\\fibonacci.bat ${env.NUMBER}"
+                bat "jenkins-scripts\\jenkins-github-fibonacci\\scripts\\fibonacci.ps1 ${env.NUMBER}"
             }
         }
         stage('Full path') {
             steps {
-                bat "\"%WORKSPACE%\\jenkins-scripts\\jenkins-github-fibonacci\\fibonacci.bat\" ${env.NUMBER}"
+                bat "\"%WORKSPACE%\\jenkins-scripts\\jenkins-github-fibonacci\\scripts\\fibonacci.ps1" ${env.NUMBER}"
             }
         }
         stage('Change directory') {
             steps {
-                dir("${env.WORKSPACE}\\jenkins-scripts\\jenkins-github-fibonacci") {
-                    bat "fibonacci.bat ${env.NUMBER}"
+                dir("${env.WORKSPACE}\\jenkins-scripts\\jenkins-github-fibonacci\\scripts\\") {
+                    bat "fibonacci.ps1 ${env.NUMBER}"
                 }
             }
         }
