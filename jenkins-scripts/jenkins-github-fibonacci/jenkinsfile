@@ -12,28 +12,37 @@ pipeline {
         timeout(time: 12, unit: 'HOURS')
         timestamps()
     }
-
+    triggers {
+        cron '@midnight'
+    }
     stages {
         stage('Make executable') {
             steps {
                 // Verify the PowerShell script exists
-                powershell 'if (Test-Path "jenkins-scripts\\jenkins-github-fibonacci\\scripts\\fibonacci.ps1") { Write-Host "File exists" } else { Write-Host "File not found"; exit 1 }'
+                powershell '''
+                    if (Test-Path "jenkins-scripts\\jenkins-github-fibonacci\\scripts\\fibonacci.ps1") { 
+                        Write-Host "File exists" 
+                    } else { 
+                        Write-Host "File not found"
+                        exit 1 
+                    }
+                '''
             }
         }
         stage('Relative path') {
             steps {
-                powershell "jenkins-scripts\\jenkins-github-fibonacci\\scripts\\fibonacci.ps1 ${env.NUMBER}"
+                powershell "& .\\jenkins-scripts\\jenkins-github-fibonacci\\scripts\\fibonacci.ps1 -N ${env.NUMBER}"
             }
         }
         stage('Full path') {
             steps {
-                powershell "\"%WORKSPACE%\\jenkins-scripts\\jenkins-github-fibonacci\\scripts\\fibonacci.ps1\" ${env.NUMBER}"
+                powershell "& '${env.WORKSPACE}\\jenkins-scripts\\jenkins-github-fibonacci\\scripts\\fibonacci.ps1' -N ${env.NUMBER}"
             }
         }
         stage('Change directory') {
             steps {
                 dir("${env.WORKSPACE}\\jenkins-scripts\\jenkins-github-fibonacci\\scripts") {
-                    powershell ".\\fibonacci.ps1 ${env.NUMBER}"
+                    powershell "& .\\fibonacci.ps1 -N ${env.NUMBER}"
                 }
             }
         }
