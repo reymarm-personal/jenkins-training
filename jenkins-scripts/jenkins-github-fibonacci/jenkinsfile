@@ -1,6 +1,6 @@
 pipeline {
     agent {
-        label 'windows || win || Windows'  // Try common Windows labels
+        label 'windows' // Specify Windows agent
     }
     parameters {
         choice(name: 'NUMBER',
@@ -12,11 +12,28 @@ pipeline {
         timeout(time: 12, unit: 'HOURS')
         timestamps()
     }
-
     stages {
-        stage('Check PowerShell Script') {
+        stage('Make executable') {
             steps {
-                 bat 'dir "../fibonacci/jenkins-scripts/jenkins-github-fibonacci/scripts/"'
+                // Windows doesn't need chmod, but we can verify the file exists
+                bat 'if exist scripts\\fibonacci.bat (echo File exists) else (echo File not found && exit 1)'
+            }
+        }
+        stage('Relative path') {
+            steps {
+                bat "scripts\\fibonacci.bat ${env.NUMBER}"
+            }
+        }
+        stage('Full path') {
+            steps {
+                bat "\"%WORKSPACE%\\scripts\\fibonacci.bat\" ${env.NUMBER}"
+            }
+        }
+        stage('Change directory') {
+            steps {
+                dir("${env.WORKSPACE}\\scripts") {
+                    bat "fibonacci.bat ${env.NUMBER}"
+                }
             }
         }
     }
