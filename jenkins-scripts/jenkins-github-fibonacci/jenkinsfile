@@ -17,7 +17,7 @@ pipeline {
         stage('Check PowerShell Script') {
             steps {
                  bat 'dir'
-                 bat 'dir ("${env.WORKSPACE}")'
+                 bat 'dir ../jenkins-scripts/jenkins-github-fibonacci/script/'
             }
         }
     }
