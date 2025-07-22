@@ -12,26 +12,29 @@ pipeline {
         timeout(time: 12, unit: 'HOURS')
         timestamps()
     }
+    triggers {
+        cron '@midnight'
+    }
     stages {
         stage('Make executable') {
             steps {
                 // Windows doesn't need chmod, but we can verify the file exists
-                bat 'if exist scripts\\fibonacci.bat (echo File exists) else (echo File not found && exit 1)'
+                bat 'if exist jenkins-scripts\\jenkins-github-fibonacci\\fibonacci.bat (echo File exists) else (echo File not found && exit 1)'
             }
         }
         stage('Relative path') {
             steps {
-                bat "scripts\\fibonacci.bat ${env.NUMBER}"
+                bat "jenkins-scripts\\jenkins-github-fibonacci\\fibonacci.bat ${env.NUMBER}"
             }
         }
         stage('Full path') {
             steps {
-                bat "\"%WORKSPACE%\\scripts\\fibonacci.bat\" ${env.NUMBER}"
+                bat "\"%WORKSPACE%\\jenkins-scripts\\jenkins-github-fibonacci\\fibonacci.bat\" ${env.NUMBER}"
             }
         }
         stage('Change directory') {
             steps {
-                dir("${env.WORKSPACE}\\scripts") {
+                dir("${env.WORKSPACE}\\jenkins-scripts\\jenkins-github-fibonacci") {
                     bat "fibonacci.bat ${env.NUMBER}"
                 }
             }
