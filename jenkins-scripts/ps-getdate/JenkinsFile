@@ -23,7 +23,7 @@ pipeline {
                             Write-Host "Executing PowerShell script from GitHub repository..."
                             
                             # Execute the PowerShell script from the checked out repository
-                            \$scriptPath = "\${env:WORKSPACE}\\jenkins-training\\jenkins-scripts\\ps-getdate\\get-date-script.ps1"
+                            \$scriptPath = "\${env:WORKSPACE}\\jenkins-scripts\\ps-getdate\\get-date-script.ps1"
                             Write-Host "Script path: \$scriptPath"
                             \$result = Invoke-Command -ComputerName "${params.TARGET_HOST}" -FilePath \$scriptPath
                             
