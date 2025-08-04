@@ -56,7 +56,7 @@ pipeline {
         stage('Alternative: Inline Command') {
             steps {
                 script {
-                    sh '''
+                    sh """
                         # Determine PowerShell command
                         if command -v pwsh >/dev/null 2>&1; then
                             POWERSHELL_CMD="pwsh"
@@ -68,24 +68,24 @@ pipeline {
                         fi
                         
                         # Execute inline PowerShell command
-                        $POWERSHELL_CMD -Command "
+                        \$POWERSHELL_CMD -Command "
                             try {
                                 Write-Host 'Executing simple Get-Date command on ${params.TARGET_HOST}...'
                                 
-                                \\$result = Invoke-Command -ComputerName '${params.TARGET_HOST}' -ScriptBlock {
+                                \\\$result = Invoke-Command -ComputerName '${params.TARGET_HOST}' -ScriptBlock {
                                     Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-                                    Write-Host 'Executed from: ' \\$env:COMPUTERNAME
+                                    Write-Host 'Executed from: ' \\\$env:COMPUTERNAME
                                 }
                                 
                                 Write-Host 'Inline command result:' -ForegroundColor Cyan
-                                Write-Host \\$result
+                                Write-Host \\\$result
                             }
                             catch {
-                                Write-Error 'Failed to execute inline command: ' \\$_
+                                Write-Error 'Failed to execute inline command: ' \\\$_
                                 exit 1
                             }
                         "
-                    '''
+                    """
                 }
             }
         }
