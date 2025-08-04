@@ -18,7 +18,7 @@ pipeline {
                         
                         Invoke-Command -ComputerName '${params.REMOTE_SERVER}' -Credential \$credential -ScriptBlock {
                             # Load and execute the PowerShell script
-                            \$scriptPath = '${WORKSPACE}\\scripts\\get-hostname.ps1'
+                            \$scriptPath = '${WORKSPACE}\\jenkins-scripts\\run-ps\\get-hostname.ps1'
                             if (Test-Path \$scriptPath) {
                                 & \$scriptPath
                             } else {
