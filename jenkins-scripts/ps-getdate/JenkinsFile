@@ -1,6 +1,11 @@
 pipeline {
     agent any
     
+    tools {
+        // Ensure PowerShell is available (if installed as a Jenkins tool)
+        // You may need to configure this in Jenkins Global Tool Configuration
+    }
+    
     parameters {
         string(name: 'TARGET_HOST', defaultValue: 'your-target-server', description: 'Target machine hostname or IP')
     }
@@ -9,32 +14,46 @@ pipeline {
         stage('Checkout') {
             steps {
                 echo 'Code checked out from GitHub automatically by Jenkins SCM'
-                // List files to verify checkout
-                powershell 'Get-ChildItem -Path . -Recurse | Select-Object Name, FullName'
+                // List files to verify checkout (using sh instead of powershell for Linux compatibility)
+                sh 'find . -type f -name "*.ps1" -o -name "*.groovy" -o -name "Jenkinsfile" | head -20'
             }
         }
         
         stage('Execute PowerShell Script on Target Machine') {
             steps {
                 script {
-                    powershell """
-                        try {
-                            Write-Host "Connecting to ${params.TARGET_HOST}..."
-                            Write-Host "Executing PowerShell script from GitHub repository..."
-                            
-                            # Execute the PowerShell script from the checked out repository
-                            \$scriptPath = "\${env:WORKSPACE}\\jenkins-scripts\\ps-getdate\\get-date-script.ps1"
-                            Write-Host "Script path: \$scriptPath"
-                            \$result = Invoke-Command -ComputerName "${params.TARGET_HOST}" -FilePath \$scriptPath
-                            
-                            Write-Host "Remote execution successful:" -ForegroundColor Green
-                            Write-Host \$result
-                        }
-                        catch {
-                            Write-Error "Failed to execute on remote machine: \$_"
+                    // Check if PowerShell is available
+                    sh '''
+                        if command -v pwsh >/dev/null 2>&1; then
+                            echo "PowerShell Core (pwsh) is available"
+                            POWERSHELL_CMD="pwsh"
+                        elif command -v powershell >/dev/null 2>&1; then
+                            echo "PowerShell (powershell) is available"
+                            POWERSHELL_CMD="powershell"
+                        else
+                            echo "ERROR: PowerShell not found. Please install PowerShell Core."
                             exit 1
-                        }
-                    """
+                        fi
+                        
+                        # Execute PowerShell script on remote machine
+                        $POWERSHELL_CMD -Command "
+                            try {
+                                Write-Host 'Connecting to ${params.TARGET_HOST}...'
+                                Write-Host 'Executing PowerShell script from GitHub repository...'
+                                
+                                \\$scriptPath = '${env:WORKSPACE}/jenkins-scripts/ps-getdate/get-date-script.ps1'
+                                Write-Host 'Script path: ' \\$scriptPath
+                                \\$result = Invoke-Command -ComputerName '${params.TARGET_HOST}' -FilePath \\$scriptPath
+                                
+                                Write-Host 'Remote execution successful:' -ForegroundColor Green
+                                Write-Host \\$result
+                            }
+                            catch {
+                                Write-Error 'Failed to execute on remote machine: ' \\$_
+                                exit 1
+                            }
+                        "
+                    '''
                 }
             }
         }
@@ -42,23 +61,36 @@ pipeline {
         stage('Alternative: Inline Command') {
             steps {
                 script {
-                    powershell """
-                        try {
-                            Write-Host "Executing simple Get-Date command on ${params.TARGET_HOST}..."
-                            
-                            \$result = Invoke-Command -ComputerName "${params.TARGET_HOST}" -ScriptBlock {
-                                Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-                                Write-Host "Executed from: \$env:COMPUTERNAME"
-                            }
-                            
-                            Write-Host "Inline command result:" -ForegroundColor Cyan
-                            Write-Host \$result
-                        }
-                        catch {
-                            Write-Error "Failed to execute inline command: \$_"
+                    sh '''
+                        # Determine PowerShell command
+                        if command -v pwsh >/dev/null 2>&1; then
+                            POWERSHELL_CMD="pwsh"
+                        elif command -v powershell >/dev/null 2>&1; then
+                            POWERSHELL_CMD="powershell"
+                        else
+                            echo "ERROR: PowerShell not found."
                             exit 1
-                        }
-                    """
+                        fi
+                        
+                        # Execute inline PowerShell command
+                        $POWERSHELL_CMD -Command "
+                            try {
+                                Write-Host 'Executing simple Get-Date command on ${params.TARGET_HOST}...'
+                                
+                                \\$result = Invoke-Command -ComputerName '${params.TARGET_HOST}' -ScriptBlock {
+                                    Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+                                    Write-Host 'Executed from: ' \\$env:COMPUTERNAME
+                                }
+                                
+                                Write-Host 'Inline command result:' -ForegroundColor Cyan
+                                Write-Host \\$result
+                            }
+                            catch {
+                                Write-Error 'Failed to execute inline command: ' \\$_
+                                exit 1
+                            }
+                        "
+                    '''
                 }
             }
         }
