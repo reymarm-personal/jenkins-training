@@ -56,35 +56,52 @@ pipeline {
         stage('Alternative: Inline Command') {
             steps {
                 script {
+                    def targetHost = params.TARGET_HOST
+                    
                     sh """
-                        # Determine PowerShell command
+                        # Check PowerShell availability and execute inline command
                         if command -v pwsh >/dev/null 2>&1; then
-                            POWERSHELL_CMD="pwsh"
+                            echo "Using PowerShell Core for inline command"
+                            pwsh -File - <<'EOF'
+try {
+    Write-Host "Executing simple Get-Date command on ${targetHost}..."
+    
+    \$result = Invoke-Command -ComputerName "${targetHost}" -ScriptBlock {
+        Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        Write-Host "Executed from: \$env:COMPUTERNAME"
+    }
+    
+    Write-Host "Inline command result:" -ForegroundColor Cyan
+    Write-Host \$result
+}
+catch {
+    Write-Error "Failed to execute inline command: \$_"
+    exit 1
+}
+EOF
                         elif command -v powershell >/dev/null 2>&1; then
-                            POWERSHELL_CMD="powershell"
+                            echo "Using PowerShell for inline command"
+                            powershell -File - <<'EOF'
+try {
+    Write-Host "Executing simple Get-Date command on ${targetHost}..."
+    
+    \$result = Invoke-Command -ComputerName "${targetHost}" -ScriptBlock {
+        Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        Write-Host "Executed from: \$env:COMPUTERNAME"
+    }
+    
+    Write-Host "Inline command result:" -ForegroundColor Cyan
+    Write-Host \$result
+}
+catch {
+    Write-Error "Failed to execute inline command: \$_"
+    exit 1
+}
+EOF
                         else
                             echo "ERROR: PowerShell not found."
                             exit 1
                         fi
-                        
-                        # Execute inline PowerShell command
-                        \$POWERSHELL_CMD -Command "
-                            try {
-                                Write-Host 'Executing simple Get-Date command on ${params.TARGET_HOST}...'
-                                
-                                \\\$result = Invoke-Command -ComputerName '${params.TARGET_HOST}' -ScriptBlock {
-                                    Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-                                    Write-Host 'Executed from: ' \\\$env:COMPUTERNAME
-                                }
-                                
-                                Write-Host 'Inline command result:' -ForegroundColor Cyan
-                                Write-Host \\\$result
-                            }
-                            catch {
-                                Write-Error 'Failed to execute inline command: ' \\\$_
-                                exit 1
-                            }
-                        "
                     """
                 }
             }
