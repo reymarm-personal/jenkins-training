@@ -11,21 +11,26 @@ pipeline {
         stage('Execute PowerShell on Remote Server') {
             steps {
                 script {
-                    // Execute the PowerShell script on remote server
+                    // Read the PowerShell script content from Jenkins workspace
+                    def scriptContent = readFile('jenkins-scripts/run-ps/get-hostname.ps1')
+                    
+                    // Execute the script content on remote server
                     powershell """
                         \$securePassword = ConvertTo-SecureString '${params.PASSWORD}' -AsPlainText -Force
                         \$credential = New-Object System.Management.Automation.PSCredential('${params.USERNAME}', \$securePassword)
                         
-                        Invoke-Command -ComputerName '${params.REMOTE_SERVER}' -Credential \$credential -ScriptBlock {
-                            # Load and execute the PowerShell script
-                            \$scriptPath = '${WORKSPACE}\\jenkins-scripts\\run-ps\\get-hostname.ps1'
-                            if (Test-Path \$scriptPath) {
-                                & \$scriptPath
-                            } else {
-                                Write-Host "Running hostname command directly..."
-                                hostname
-                            }
+                        # Define the script block with our PowerShell commands
+                        \$scriptBlock = {
+                            # Execute the hostname commands
+                            Write-Host "=== Remote Server Information ===" -ForegroundColor Green
+                            Write-Host "Server Hostname: \$(hostname)" -ForegroundColor Yellow
+                            Write-Host "Current User: \$(\$env:USERNAME)" -ForegroundColor Yellow
+                            Write-Host "Current Date/Time: \$(Get-Date)" -ForegroundColor Yellow
+                            Write-Host "=================================" -ForegroundColor Green
                         }
+                        
+                        # Execute on remote server
+                        Invoke-Command -ComputerName '${params.REMOTE_SERVER}' -Credential \$credential -ScriptBlock \$scriptBlock
                     """
                 }
             }
