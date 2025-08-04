@@ -1,11 +1,6 @@
 pipeline {
     agent any
     
-    tools {
-        // Ensure PowerShell is available (if installed as a Jenkins tool)
-        // You may need to configure this in Jenkins Global Tool Configuration
-    }
-    
     parameters {
         string(name: 'TARGET_HOST', defaultValue: 'your-target-server', description: 'Target machine hostname or IP')
     }
