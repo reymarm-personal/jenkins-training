@@ -14,55 +14,7 @@ pipeline {
             }
         }
         
-        stage('Execute PowerShell Script on Target Machine') {
-            steps {
-                script {
-                    powershell """
-                        try {
-                            Write-Host "Connecting to ${params.TARGET_HOST}..."
-                            Write-Host "Executing PowerShell script from GitHub repository..."
-                            
-                            # Execute the PowerShell script from the checked out repository
-                            \$scriptPath = "\${env:WORKSPACE}\\jenkins-scripts\\ps-getdate\\get-date-script.ps1"
-                            Write-Host "Script path: \$scriptPath"
-                            \$result = Invoke-Command -ComputerName "${params.TARGET_HOST}" -FilePath \$scriptPath
-                            
-                            Write-Host "Remote execution successful:" -ForegroundColor Green
-                            Write-Host \$result
-                        }
-                        catch {
-                            Write-Error "Failed to execute on remote machine: \$_"
-                            exit 1
-                        }
-                    """
-                }
-            }
-        }
-        
-        stage('Alternative: Inline Command') {
-            steps {
-                script {
-                    powershell """
-                        try {
-                            Write-Host "Executing simple Get-Date command on ${params.TARGET_HOST}..."
-                            
-                            \$result = Invoke-Command -ComputerName "${params.TARGET_HOST}" -ScriptBlock {
-                                Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-                                Write-Host "Executed from: \$env:COMPUTERNAME"
-                            }
-                            
-                            Write-Host "Inline command result:" -ForegroundColor Cyan
-                            Write-Host \$result
-                        }
-                        catch {
-                            Write-Error "Failed to execute inline command: \$_"
-                            exit 1
-                        }
-                    """
-                }
-            }
-        }
-    }
+      
     
     post {
         always {
