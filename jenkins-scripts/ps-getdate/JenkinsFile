@@ -6,15 +6,28 @@ pipeline {
     }
     
     stages {
-        stage('Execute PowerShell on Target Machine') {
+        stage('Checkout') {
+            steps {
+                echo 'Code checked out from GitHub automatically by Jenkins SCM'
+                // List files to verify checkout
+                powershell 'Get-ChildItem -Path . -Recurse | Select-Object Name, FullName'
+            }
+        }
+        
+        stage('Execute PowerShell Script on Target Machine') {
             steps {
                 script {
-                    // Method 1: Execute PowerShell script directly on remote machine
                     powershell """
                         try {
                             Write-Host "Connecting to ${params.TARGET_HOST}..."
-                            \$result = Invoke-Command -ComputerName "${params.TARGET_HOST}" -FilePath "get-date-script.ps1"
-                            Write-Host "Remote execution successful:"
+                            Write-Host "Executing PowerShell script from GitHub repository..."
+                            
+                            # Execute the PowerShell script from the checked out repository
+                            \$scriptPath = "\${env:WORKSPACE}\\jenkins-training\\jenkins-scripts\\ps-getdate\\get-date-script.ps1"
+                            Write-Host "Script path: \$scriptPath"
+                            \$result = Invoke-Command -ComputerName "${params.TARGET_HOST}" -FilePath \$scriptPath
+                            
+                            Write-Host "Remote execution successful:" -ForegroundColor Green
                             Write-Host \$result
                         }
                         catch {
@@ -26,20 +39,19 @@ pipeline {
             }
         }
         
-        stage('Alternative: Execute Inline Command') {
+        stage('Alternative: Inline Command') {
             steps {
                 script {
-                    // Method 2: Execute PowerShell commands directly without separate script file
                     powershell """
                         try {
-                            Write-Host "Executing inline PowerShell on ${params.TARGET_HOST}..."
+                            Write-Host "Executing simple Get-Date command on ${params.TARGET_HOST}..."
+                            
                             \$result = Invoke-Command -ComputerName "${params.TARGET_HOST}" -ScriptBlock {
-                                # Your PowerShell commands here
-                                Get-Date
-                                Write-Host "Computer Name: \$env:COMPUTERNAME"
-                                Write-Host "Current User: \$env:USERNAME"
+                                Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+                                Write-Host "Executed from: \$env:COMPUTERNAME"
                             }
-                            Write-Host "Inline execution result:"
+                            
+                            Write-Host "Inline command result:" -ForegroundColor Cyan
                             Write-Host \$result
                         }
                         catch {
