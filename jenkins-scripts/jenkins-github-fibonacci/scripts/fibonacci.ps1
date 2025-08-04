@@ -5,7 +5,7 @@ param(
 # Initialize variables
 $a = 0
 $b = 1
-
+Invoke-Command -ComputerName USEADVVT1DB1 -ScriptBlock {hostname}
 Write-Host "The Fibonacci series is :"
 
 # Generate Fibonacci sequence
