@@ -106,7 +106,7 @@ function Remove-TempFiles {
         $removedCount = 0
         foreach ($file in $filesToRemove) {
             try {
-                Remove-Item -Path $file.FullName -Force -ErrorAction Stop
+                #Remove-Item -Path $file.FullName -Force -ErrorAction Stop
                 $removedCount++
             } catch {
                 Write-Log "Failed to remove file: $($file.FullName) - $($_.Exception.Message)" "ERROR"
@@ -117,7 +117,7 @@ function Remove-TempFiles {
         try {
             Get-ChildItem -Path $Path -Recurse -Force -Directory -ErrorAction SilentlyContinue |
             Where-Object { (Get-ChildItem -Path $_.FullName -Force -ErrorAction SilentlyContinue).Count -eq 0 } |
-            Remove-Item -Force -ErrorAction SilentlyContinue
+            #Remove-Item -Force -ErrorAction SilentlyContinue
         } catch {
             Write-Log "Warning: Could not remove some empty directories - $($_.Exception.Message)" "WARNING"
         }
