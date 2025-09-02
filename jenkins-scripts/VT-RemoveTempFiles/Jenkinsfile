@@ -1,0 +1,337 @@
+// Jenkins Pipeline for Multi-Server PowerShell Script Execution
+// Supports both traditional Jenkins and containerized Jenkins
+
+pipeline {
+    agent any
+    
+    // Schedule: Daily at 9:00 PM
+    triggers {
+        cron('0 21 * * *')
+    }
+    
+    parameters {
+        choice(
+            name: 'ENVIRONMENT',
+            choices: ['PROD', 'UAT', 'DEV'],
+            description: 'Target environment for script execution'
+        )
+        
+        string(
+            name: 'SCRIPT_NAME',
+            defaultValue: 'VT-RemoveTempFiles.ps1',
+            description: 'PowerShell script to execute'
+        )
+        
+        string(
+            name: 'SERVER_LIST_FILE',
+            defaultValue: 'servers.txt',
+            description: 'File containing list of target servers'
+        )
+        
+        string(
+            name: 'DAYS_OLD',
+            defaultValue: '7',
+            description: 'Number of days old for file cleanup'
+        )
+        
+        string(
+            name: 'MAX_CONCURRENCY',
+            defaultValue: '10',
+            description: 'Maximum number of concurrent executions'
+        )
+        
+        booleanParam(
+            name: 'WHATIF_MODE',
+            defaultValue: false,
+            description: 'Run in WhatIf mode (no actual changes)'
+        )
+        
+        booleanParam(
+            name: 'SKIP_CONNECTIVITY_TEST',
+            defaultValue: false,
+            description: 'Skip connectivity test (faster execution)'
+        )
+    }
+    
+    environment {
+        // Repository configuration - declared as variable as requested
+        REPO_URL = 'https://github.com/reymarm-personal/jenkins-training.git'
+        REPO_BRANCH = 'master'
+        SCRIPTS_PATH = 'jenkins-scripts/VT-RemoveTempFiles'
+        
+        // Execution paths
+        WORKSPACE_SCRIPTS = "${WORKSPACE}\\scripts"
+        WORKSPACE_LOGS = "${WORKSPACE}\\logs"
+        FRAMEWORK_SCRIPT = "${WORKSPACE_SCRIPTS}\\PowerShell-Execution-Framework.ps1"
+        TARGET_SCRIPT = "${WORKSPACE_SCRIPTS}\\${SCRIPTS_PATH}\\${params.SCRIPT_NAME}"
+        SERVER_LIST = "${WORKSPACE_SCRIPTS}\\${SCRIPTS_PATH}\\${params.SERVER_LIST_FILE}"
+        
+        // PowerShell execution policy
+        POWERSHELL_POLICY = 'Bypass'
+    }
+    
+    stages {
+        stage('Initialize') {
+            steps {
+                script {
+                    echo "=== Jenkins Pipeline Started ==="
+                    echo "Environment: ${params.ENVIRONMENT}"
+                    echo "Script: ${params.SCRIPT_NAME}"
+                    echo "Server List: ${params.SERVER_LIST_FILE}"
+                    echo "WhatIf Mode: ${params.WHATIF_MODE}"
+                    echo "Repository: ${env.REPO_URL}"
+                    
+                    // Clean workspace
+                    cleanWs()
+                    
+                    // Create required directories
+                    bat """
+                        mkdir "${env.WORKSPACE_SCRIPTS}" 2>nul || echo Directory exists
+                        mkdir "${env.WORKSPACE_LOGS}" 2>nul || echo Directory exists
+                    """
+                }
+            }
+        }
+        
+        stage('Checkout Repository') {
+            steps {
+                script {
+                    echo "Cloning repository: ${env.REPO_URL}"
+                    
+                    // Clone the repository
+                    checkout([
+                        $class: 'GitSCM',
+                        branches: [[name: "*/${env.REPO_BRANCH}"]],
+                        userRemoteConfigs: [[url: "${env.REPO_URL}"]],
+                        extensions: [
+                            [$class: 'RelativeTargetDirectory', relativeTargetDir: 'repo']
+                        ]
+                    ])
+                    
+                    // Copy scripts to workspace
+                    bat """
+                        xcopy /E /I /Y "${WORKSPACE}\\repo\\${env.SCRIPTS_PATH}" "${env.WORKSPACE_SCRIPTS}\\${env.SCRIPTS_PATH}\\"
+                        copy "${WORKSPACE}\\scripts\\PowerShell-Execution-Framework.ps1" "${env.WORKSPACE_SCRIPTS}\\" 2>nul || echo Framework script will be created
+                    """
+                }
+            }
+        }
+        
+        stage('Prepare Framework') {
+            steps {
+                script {
+                    echo "Setting up PowerShell execution framework..."
+                    
+                    // Create framework script if it doesn't exist
+                    writeFile file: "${env.FRAMEWORK_SCRIPT}", text: '''
+                        # PowerShell Multi-Server Execution Framework (Embedded)
+                        # This is the embedded version for Jenkins pipeline
+                        
+                        param(
+                            [Parameter(Mandatory = $true)]
+                            [string]$ServerListFile,
+                            
+                            [Parameter(Mandatory = $true)]
+                            [string]$ScriptPath,
+                            
+                            [Parameter(Mandatory = $false)]
+                            [hashtable]$ScriptParameters = @{},
+                            
+                            [Parameter(Mandatory = $false)]
+                            [string]$LogPath = "C:\\Temp\\Logs\\Framework",
+                            
+                            [Parameter(Mandatory = $false)]
+                            [int]$MaxConcurrency = 10,
+                            
+                            [Parameter(Mandatory = $false)]
+                            [string]$Environment = "PROD",
+                            
+                            [Parameter(Mandatory = $false)]
+                            [switch]$WhatIf = $false,
+                            
+                            [Parameter(Mandatory = $false)]
+                            [switch]$SkipConnectivityTest = $false
+                        )
+                        
+                        # Framework execution logic here...
+                        Write-Host "Framework executed with parameters:"
+                        Write-Host "ServerListFile: $ServerListFile"
+                        Write-Host "ScriptPath: $ScriptPath" 
+                        Write-Host "Environment: $Environment"
+                        Write-Host "MaxConcurrency: $MaxConcurrency"
+                        Write-Host "WhatIf: $WhatIf"
+                        
+                        # For now, return success - replace with actual framework logic
+                        exit 0
+                    '''
+                    
+                    // Validate required files
+                    bat """
+                        if not exist "${env.TARGET_SCRIPT}" (
+                            echo ERROR: Target script not found: ${env.TARGET_SCRIPT}
+                            exit /b 1
+                        )
+                        
+                        if not exist "${env.SERVER_LIST}" (
+                            echo ERROR: Server list file not found: ${env.SERVER_LIST}
+                            exit /b 1
+                        )
+                        
+                        echo Validation passed - all required files found
+                    """
+                }
+            }
+        }
+        
+        stage('Validate Configuration') {
+            steps {
+                script {
+                    echo "Validating configuration and connectivity..."
+                    
+                    // Test PowerShell execution
+                    bat """
+                        powershell -ExecutionPolicy ${env.POWERSHELL_POLICY} -Command "& {
+                            Write-Host 'PowerShell validation successful'
+                            Write-Host 'PowerShell version:' \$PSVersionTable.PSVersion
+                            Write-Host 'Execution policy:' (Get-ExecutionPolicy)
+                        }"
+                    """
+                    
+                    // Display server list content (for validation)
+                    bat """
+                        echo === Server List Content ===
+                        type "${env.SERVER_LIST}"
+                        echo === End Server List ===
+                    """
+                }
+            }
+        }
+        
+        stage('Execute PowerShell Script') {
+            steps {
+                script {
+                    echo "Executing PowerShell script on target servers..."
+                    
+                    // Build PowerShell parameters
+                    def scriptParams = [
+                        "DaysOld=${params.DAYS_OLD}",
+                        "Environment='${params.ENVIRONMENT}'"
+                    ]
+                    
+                    def frameworkParams = [
+                        "-ServerListFile '${env.SERVER_LIST}'",
+                        "-ScriptPath '${env.TARGET_SCRIPT}'",
+                        "-Environment '${params.ENVIRONMENT}'",
+                        "-MaxConcurrency ${params.MAX_CONCURRENCY}",
+                        "-LogPath '${env.WORKSPACE_LOGS}'"
+                    ]
+                    
+                    if (params.WHATIF_MODE) {
+                        frameworkParams.add("-WhatIf")
+                        scriptParams.add("WhatIf=\$true")
+                    }
+                    
+                    if (params.SKIP_CONNECTIVITY_TEST) {
+                        frameworkParams.add("-SkipConnectivityTest")
+                    }
+                    
+                    // For now, execute the target script directly on localhost for testing
+                    // Replace this with framework execution once fully implemented
+                    def psCommand = """
+                        powershell -ExecutionPolicy ${env.POWERSHELL_POLICY} -Command "& {
+                            try {
+                                # Test script execution
+                                & '${env.TARGET_SCRIPT}' -Environment '${params.ENVIRONMENT}' -DaysOld ${params.DAYS_OLD} -LogPath '${env.WORKSPACE_LOGS}' $(if ('${params.WHATIF_MODE}' -eq 'true') {'-WhatIf'} else {''})
+                                Write-Host 'Script execution completed successfully'
+                                exit 0
+                            } catch {
+                                Write-Host 'Script execution failed:' \$_.Exception.Message
+                                exit 1
+                            }
+                        }"
+                    """
+                    
+                    // Execute the command
+                    def result = bat(script: psCommand, returnStatus: true)
+                    
+                    if (result != 0) {
+                        error("PowerShell script execution failed with exit code: ${result}")
+                    }
+                }
+            }
+        }
+        
+        stage('Collect Results') {
+            steps {
+                script {
+                    echo "Collecting execution results and logs..."
+                    
+                    // Archive logs and results
+                    bat """
+                        echo === Log Files ===
+                        dir "${env.WORKSPACE_LOGS}" /b 2>nul || echo No log files found
+                        echo === Summary Files ===
+                        dir "${env.WORKSPACE_LOGS}\\*Summary*.json" /b 2>nul || echo No summary files found
+                    """
+                    
+                    // Display log content if available
+                    bat """
+                        for %%f in ("${env.WORKSPACE_LOGS}\\*.log") do (
+                            echo === Content of %%f ===
+                            type "%%f" 2>nul || echo Could not read log file
+                            echo.
+                        )
+                    """
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            script {
+                echo "=== Pipeline Post-Processing ==="
+                
+                // Archive artifacts
+                archiveArtifacts artifacts: 'logs/**/*', allowEmptyArchive: true, fingerprint: true
+                
+                // Clean up sensitive information
+                bat """
+                    echo Cleaning up workspace...
+                """
+            }
+        }
+        
+        success {
+            script {
+                echo "✓ Pipeline completed successfully!"
+                
+                // Send success notification (customize as needed)
+                // emailext (
+                //     subject: "SUCCESS: PowerShell Execution - ${params.ENVIRONMENT}",
+                //     body: "PowerShell script execution completed successfully on ${params.ENVIRONMENT} environment.",
+                //     to: "admin@company.com"
+                // )
+            }
+        }
+        
+        failure {
+            script {
+                echo "✗ Pipeline failed!"
+                
+                // Send failure notification (customize as needed)
+                // emailext (
+                //     subject: "FAILED: PowerShell Execution - ${params.ENVIRONMENT}",
+                //     body: "PowerShell script execution failed on ${params.ENVIRONMENT} environment. Check logs for details.",
+                //     to: "admin@company.com"
+                // )
+            }
+        }
+        
+        unstable {
+            script {
+                echo "⚠ Pipeline completed with warnings!"
+            }
+        }
+    }
+}
