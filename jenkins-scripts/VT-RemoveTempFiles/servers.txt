@@ -3,5 +3,5 @@
 # Empty lines are also ignored
 # One server per line
 
-server01.company.com
+USEADVVT1WEB1
 
