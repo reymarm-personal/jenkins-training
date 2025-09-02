@@ -1,0 +1,7 @@
+# Server List for PowerShell Script Execution
+# Lines starting with # are comments and will be ignored
+# Empty lines are also ignored
+# One server per line
+
+server01.company.com
+
