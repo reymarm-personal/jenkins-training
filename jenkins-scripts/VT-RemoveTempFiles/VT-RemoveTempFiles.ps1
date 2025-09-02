@@ -1,46 +1,34 @@
-# PowerShell Multi-Server Execution Framework
-# Framework for executing PowerShell scripts across multiple servers
+# Enhanced Temp Files Cleanup Script
+# Best Practices Applied: Error Handling, Logging, Progress Tracking, Parameterization
 
 param(
-    [Parameter(Mandatory = $true)]
-    [string]$ServerListFile,
-    
-    [Parameter(Mandatory = $true)]
-    [string]$ScriptPath,
+    [Parameter(Mandatory = $false)]
+    [string]$LogPath = "C:\Logs\TempCleanup",
     
     [Parameter(Mandatory = $false)]
-    [hashtable]$ScriptParameters = @{},
-    
-    [Parameter(Mandatory = $false)]
-    [string]$LogPath = "C:\Logs\Framework",
-    
-    [Parameter(Mandatory = $false)]
-    [int]$MaxConcurrency = 10,
+    [int]$DaysOld = 7,
     
     [Parameter(Mandatory = $false)]
     [string]$Environment = "PROD",
     
     [Parameter(Mandatory = $false)]
-    [PSCredential]$Credential,
-    
-    [Parameter(Mandatory = $false)]
     [switch]$WhatIf = $false
 )
 
-# Initialize framework logging
-function Initialize-FrameworkLogging {
+# Initialize logging
+function Initialize-Logging {
     param([string]$LogPath)
     
     if (!(Test-Path $LogPath)) {
         New-Item -ItemType Directory -Path $LogPath -Force | Out-Null
     }
     
-    $script:FrameworkLogFile = Join-Path $LogPath "Framework_$(Get-Date -Format 'yyyyMMdd_HHmmss').log"
-    return $script:FrameworkLogFile
+    $script:LogFile = Join-Path $LogPath "TempCleanup_$(Get-Date -Format 'yyyyMMdd_HHmmss')_$env:COMPUTERNAME.log"
+    return $script:LogFile
 }
 
-# Framework logging function
-function Write-FrameworkLog {
+# Enhanced logging function
+function Write-Log {
     param(
         [string]$Message,
         [ValidateSet("INFO", "WARNING", "ERROR", "SUCCESS")]
@@ -48,265 +36,195 @@ function Write-FrameworkLog {
     )
     
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    $logMessage = "[$timestamp] [FRAMEWORK] [$Level] $Message"
+    $logMessage = "[$timestamp] [$Level] [$env:COMPUTERNAME] $Message"
     
     # Write to console with colors
     switch ($Level) {
-        "INFO"    { Write-Host $logMessage -ForegroundColor Cyan }
+        "INFO"    { Write-Host $logMessage -ForegroundColor White }
         "WARNING" { Write-Host $logMessage -ForegroundColor Yellow }
         "ERROR"   { Write-Host $logMessage -ForegroundColor Red }
         "SUCCESS" { Write-Host $logMessage -ForegroundColor Green }
     }
     
     # Write to log file
-    Add-Content -Path $script:FrameworkLogFile -Value $logMessage -ErrorAction SilentlyContinue
+    Add-Content -Path $script:LogFile -Value $logMessage -ErrorAction SilentlyContinue
 }
 
-# Function to read and validate server list
-function Get-ServerList {
-    param([string]$ServerListFile)
+# Function to get folder size
+function Get-FolderSize {
+    param([string]$Path)
     
     try {
-        if (!(Test-Path $ServerListFile)) {
-            throw "Server list file not found: $ServerListFile"
+        if (Test-Path $Path) {
+            $size = (Get-ChildItem -Path $Path -Recurse -Force -ErrorAction SilentlyContinue | 
+                    Measure-Object -Property Length -Sum).Sum
+            return [math]::Round($size / 1MB, 2)
         }
-        
-        $servers = Get-Content -Path $ServerListFile | 
-                  Where-Object { $_ -match '\S' -and !$_.StartsWith('#') } |
-                  ForEach-Object { $_.Trim() }
-        
-        if ($servers.Count -eq 0) {
-            throw "No valid servers found in the server list file"
-        }
-        
-        Write-FrameworkLog "Loaded $($servers.Count) servers from $ServerListFile" "SUCCESS"
-        return $servers
-        
+        return 0
     } catch {
-        Write-FrameworkLog "Error reading server list: $($_.Exception.Message)" "ERROR"
-        throw
+        return 0
     }
 }
 
-# Function to test server connectivity
-function Test-ServerConnectivity {
+# Enhanced cleanup function
+function Remove-TempFiles {
     param(
-        [string[]]$Servers,
-        [PSCredential]$Credential
-    )
-    
-    Write-FrameworkLog "Testing connectivity to $($Servers.Count) servers..." "INFO"
-    
-    $results = @{}
-    
-    $Servers | ForEach-Object -Parallel {
-        $server = $_
-        $cred = $using:Credential
-        
-        try {
-            $testResult = Test-NetConnection -ComputerName $server -Port 5985 -WarningAction SilentlyContinue
-            
-            if ($testResult.TcpTestSucceeded) {
-                # Test WinRM session
-                $session = $null
-                try {
-                    if ($cred) {
-                        $session = New-PSSession -ComputerName $server -Credential $cred -ErrorAction Stop
-                    } else {
-                        $session = New-PSSession -ComputerName $server -ErrorAction Stop
-                    }
-                    
-                    $result = @{ Success = $true; Error = $null }
-                    Remove-PSSession -Session $session -ErrorAction SilentlyContinue
-                } catch {
-                    $result = @{ Success = $false; Error = $_.Exception.Message }
-                }
-            } else {
-                $result = @{ Success = $false; Error = "Port 5985 not reachable" }
-            }
-        } catch {
-            $result = @{ Success = $false; Error = $_.Exception.Message }
-        }
-        
-        return @{ Server = $server; Result = $result }
-    } -ThrottleLimit $MaxConcurrency | ForEach-Object {
-        $results[$_.Server] = $_.Result
-        
-        if ($_.Result.Success) {
-            Write-FrameworkLog "✓ $($_.Server) - Connected" "SUCCESS"
-        } else {
-            Write-FrameworkLog "✗ $($_.Server) - Failed: $($_.Result.Error)" "ERROR"
-        }
-    }
-    
-    $successCount = ($results.Values | Where-Object { $_.Success }).Count
-    $failCount = $results.Count - $successCount
-    
-    Write-FrameworkLog "Connectivity test completed: $successCount successful, $failCount failed" "INFO"
-    
-    return $results
-}
-
-# Function to execute script on servers
-function Invoke-ScriptOnServers {
-    param(
-        [string[]]$Servers,
-        [string]$ScriptPath,
-        [hashtable]$ScriptParameters,
-        [PSCredential]$Credential,
+        [string]$Path,
+        [string]$Description,
+        [int]$DaysOld,
         [switch]$WhatIf
     )
     
-    Write-FrameworkLog "Starting script execution on $($Servers.Count) servers..." "INFO"
-    
-    if ($WhatIf) {
-        Write-FrameworkLog "WHATIF: Would execute script on servers" "INFO"
-        return @{}
-    }
-    
-    # Read script content
-    if (!(Test-Path $ScriptPath)) {
-        throw "Script file not found: $ScriptPath"
-    }
-    
-    $scriptContent = Get-Content -Path $ScriptPath -Raw
-    $results = @{}
-    
-    $Servers | ForEach-Object -Parallel {
-        $server = $_
-        $script = $using:scriptContent
-        $params = $using:ScriptParameters
-        $cred = $using:Credential
-        $env = $using:Environment
-        
-        $result = @{
-            Server = $server
-            StartTime = Get-Date
-            EndTime = $null
-            Success = $false
-            Output = ""
-            Error = ""
-            ExitCode = -1
+    try {
+        if (!(Test-Path $Path)) {
+            Write-Log "Path not found: $Path" "WARNING"
+            return @{ Success = $false; SizeBefore = 0; SizeAfter = 0; FilesRemoved = 0 }
         }
         
+        $sizeBefore = Get-FolderSize -Path $Path
+        Write-Log "Processing $Description at: $Path" "INFO"
+        Write-Log "Folder size before cleanup: $sizeBefore MB" "INFO"
+        
+        $cutoffDate = (Get-Date).AddDays(-$DaysOld)
+        $filesToRemove = Get-ChildItem -Path $Path -Recurse -Force -ErrorAction SilentlyContinue |
+                        Where-Object { !$_.PSIsContainer -and $_.LastWriteTime -lt $cutoffDate }
+        
+        $filesCount = ($filesToRemove | Measure-Object).Count
+        
+        if ($filesCount -eq 0) {
+            Write-Log "No files older than $DaysOld days found in $Description" "INFO"
+            return @{ Success = $true; SizeBefore = $sizeBefore; SizeAfter = $sizeBefore; FilesRemoved = 0 }
+        }
+        
+        Write-Log "Found $filesCount files older than $DaysOld days" "INFO"
+        
+        if ($WhatIf) {
+            Write-Log "WHATIF: Would remove $filesCount files from $Description" "INFO"
+            return @{ Success = $true; SizeBefore = $sizeBefore; SizeAfter = $sizeBefore; FilesRemoved = $filesCount }
+        }
+        
+        $removedCount = 0
+        foreach ($file in $filesToRemove) {
+            try {
+                Remove-Item -Path $file.FullName -Force -ErrorAction Stop
+                $removedCount++
+            } catch {
+                Write-Log "Failed to remove file: $($file.FullName) - $($_.Exception.Message)" "ERROR"
+            }
+        }
+        
+        # Remove empty directories
         try {
-            # Create session
-            $session = $null
-            if ($cred) {
-                $session = New-PSSession -ComputerName $server -Credential $cred -ErrorAction Stop
-            } else {
-                $session = New-PSSession -ComputerName $server -ErrorAction Stop
-            }
-            
-            # Add environment parameter
-            $params['Environment'] = $env
-            
-            # Execute script
-            $scriptBlock = [ScriptBlock]::Create($script)
-            $output = Invoke-Command -Session $session -ScriptBlock $scriptBlock -ArgumentList $params -ErrorAction Stop
-            
-            $result.Success = $true
-            $result.Output = $output | Out-String
-            $result.ExitCode = 0
-            
-            # Clean up session
-            Remove-PSSession -Session $session -ErrorAction SilentlyContinue
-            
+            Get-ChildItem -Path $Path -Recurse -Force -Directory -ErrorAction SilentlyContinue |
+            Where-Object { (Get-ChildItem -Path $_.FullName -Force -ErrorAction SilentlyContinue).Count -eq 0 } |
+            Remove-Item -Force -ErrorAction SilentlyContinue
         } catch {
-            $result.Error = $_.Exception.Message
-            $result.ExitCode = 1
-            
-            # Clean up session on error
-            if ($session) {
-                Remove-PSSession -Session $session -ErrorAction SilentlyContinue
-            }
-        } finally {
-            $result.EndTime = Get-Date
-            $result.Duration = ($result.EndTime - $result.StartTime).TotalSeconds
+            Write-Log "Warning: Could not remove some empty directories - $($_.Exception.Message)" "WARNING"
         }
         
-        return $result
+        $sizeAfter = Get-FolderSize -Path $Path
+        $spaceSaved = $sizeBefore - $sizeAfter
         
-    } -ThrottleLimit $MaxConcurrency | ForEach-Object {
-        $results[$_.Server] = $_
+        Write-Log "Cleanup completed for $Description" "SUCCESS"
+        Write-Log "Files removed: $removedCount of $filesCount" "SUCCESS"
+        Write-Log "Folder size after cleanup: $sizeAfter MB" "SUCCESS"
+        Write-Log "Space saved: $spaceSaved MB" "SUCCESS"
         
-        if ($_.Success) {
-            Write-FrameworkLog "✓ $($_.Server) - Completed in $([math]::Round($_.Duration, 2))s" "SUCCESS"
-        } else {
-            Write-FrameworkLog "✗ $($_.Server) - Failed: $($_.Error)" "ERROR"
+        return @{ 
+            Success = $true
+            SizeBefore = $sizeBefore
+            SizeAfter = $sizeAfter
+            FilesRemoved = $removedCount
+            SpaceSaved = $spaceSaved
         }
+        
+    } catch {
+        Write-Log "Error processing $Description`: $($_.Exception.Message)" "ERROR"
+        return @{ Success = $false; SizeBefore = 0; SizeAfter = 0; FilesRemoved = 0 }
     }
-    
-    return $results
 }
 
 # Main execution
 try {
     # Initialize logging
-    $frameworkLogFile = Initialize-FrameworkLogging -LogPath $LogPath
-    Write-FrameworkLog "=== PowerShell Execution Framework Started ===" "INFO"
-    Write-FrameworkLog "Environment: $Environment" "INFO"
-    Write-FrameworkLog "Script: $ScriptPath" "INFO"
-    Write-FrameworkLog "Server List: $ServerListFile" "INFO"
-    Write-FrameworkLog "Max Concurrency: $MaxConcurrency" "INFO"
-    Write-FrameworkLog "WhatIf Mode: $WhatIf" "INFO"
-    Write-FrameworkLog "Log File: $frameworkLogFile" "INFO"
+    $logFile = Initialize-Logging -LogPath $LogPath
+    Write-Log "=== Temp Files Cleanup Started ===" "INFO"
+    Write-Log "Environment: $Environment" "INFO"
+    Write-Log "Server: $env:COMPUTERNAME" "INFO"
+    Write-Log "Days Old Threshold: $DaysOld" "INFO"
+    Write-Log "WhatIf Mode: $WhatIf" "INFO"
+    Write-Log "Log File: $logFile" "INFO"
     
-    # Load server list
-    $servers = Get-ServerList -ServerListFile $ServerListFile
+    # Define cleanup locations
+    $cleanupLocations = @(
+        @{ Path = "$env:TEMP"; Description = "User Temp Directory" },
+        @{ Path = "$env:WINDIR\Temp"; Description = "Windows Temp Directory" },
+        @{ Path = "$env:LOCALAPPDATA\Temp"; Description = "Local AppData Temp" },
+        @{ Path = "$env:WINDIR\Prefetch"; Description = "Windows Prefetch" },
+        @{ Path = "$env:WINDIR\SoftwareDistribution\Download"; Description = "Windows Update Cache" }
+    )
     
-    # Test connectivity
-    $connectivityResults = Test-ServerConnectivity -Servers $servers -Credential $Credential
-    $availableServers = $connectivityResults.Keys | Where-Object { $connectivityResults[$_].Success }
-    
-    if ($availableServers.Count -eq 0) {
-        throw "No servers are available for script execution"
+    # Add IIS logs if IIS is installed
+    if (Get-Service W3SVC -ErrorAction SilentlyContinue) {
+        $cleanupLocations += @{ Path = "$env:SystemDrive\inetpub\logs\LogFiles"; Description = "IIS Log Files" }
     }
     
-    Write-FrameworkLog "Proceeding with $($availableServers.Count) available servers" "INFO"
+    $results = @()
+    $totalSpaceSaved = 0
+    $totalFilesRemoved = 0
     
-    # Execute script on available servers
-    $executionResults = Invoke-ScriptOnServers -Servers $availableServers -ScriptPath $ScriptPath -ScriptParameters $ScriptParameters -Credential $Credential -WhatIf:$WhatIf
-    
-    # Generate summary report
-    $successCount = ($executionResults.Values | Where-Object { $_.Success }).Count
-    $failCount = $executionResults.Count - $successCount
-    
-    $summary = @{
-        Framework = @{
-            StartTime = $frameworkLogFile | Split-Path -Leaf | Select-String -Pattern '\d{8}_\d{6}' | ForEach-Object { $_.Matches.Value }
-            Environment = $Environment
-            ScriptPath = $ScriptPath
-            TotalServers = $servers.Count
-            AvailableServers = $availableServers.Count
-            SuccessfulExecutions = $successCount
-            FailedExecutions = $failCount
-            OverallSuccess = $failCount -eq 0
+    # Process each location
+    foreach ($location in $cleanupLocations) {
+        $result = Remove-TempFiles -Path $location.Path -Description $location.Description -DaysOld $DaysOld -WhatIf:$WhatIf
+        $results += [PSCustomObject]@{
+            Location = $location.Description
+            Path = $location.Path
+            Success = $result.Success
+            SizeBefore = $result.SizeBefore
+            SizeAfter = $result.SizeAfter
+            FilesRemoved = $result.FilesRemoved
+            SpaceSaved = $result.SpaceSaved
         }
-        ConnectivityResults = $connectivityResults
-        ExecutionResults = $executionResults
+        
+        if ($result.Success) {
+            $totalSpaceSaved += $result.SpaceSaved
+            $totalFilesRemoved += $result.FilesRemoved
+        }
     }
     
-    # Export summary
-    $summaryFile = Join-Path $LogPath "ExecutionSummary_$(Get-Date -Format 'yyyyMMdd_HHmmss').json"
-    $summary | ConvertTo-Json -Depth 4 | Out-File -FilePath $summaryFile -Encoding UTF8
+    # Summary
+    Write-Log "=== Cleanup Summary ===" "SUCCESS"
+    Write-Log "Total files removed: $totalFilesRemoved" "SUCCESS"
+    Write-Log "Total space saved: $([math]::Round($totalSpaceSaved, 2)) MB" "SUCCESS"
     
-    Write-FrameworkLog "=== Execution Summary ===" "SUCCESS"
-    Write-FrameworkLog "Total servers: $($servers.Count)" "INFO"
-    Write-FrameworkLog "Available servers: $($availableServers.Count)" "INFO"
-    Write-FrameworkLog "Successful executions: $successCount" "SUCCESS"
-    Write-FrameworkLog "Failed executions: $failCount" "$(if($failCount -gt 0){'ERROR'}else{'INFO'})"
-    Write-FrameworkLog "Summary exported to: $summaryFile" "INFO"
-    Write-FrameworkLog "=== Framework Execution Completed ===" "SUCCESS"
+    # Return results for Jenkins consumption
+    $summaryObject = @{
+        Server = $env:COMPUTERNAME
+        Environment = $Environment
+        Timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        TotalFilesRemoved = $totalFilesRemoved
+        TotalSpaceSaved = [math]::Round($totalSpaceSaved, 2)
+        Results = $results
+        LogFile = $logFile
+        Success = ($results | Where-Object { !$_.Success }).Count -eq 0
+    }
+    
+    # Export summary as JSON for Jenkins
+    $summaryFile = Join-Path $LogPath "Summary_$(Get-Date -Format 'yyyyMMdd_HHmmss')_$env:COMPUTERNAME.json"
+    $summaryObject | ConvertTo-Json -Depth 3 | Out-File -FilePath $summaryFile -Encoding UTF8
+    
+    Write-Log "Summary exported to: $summaryFile" "INFO"
+    Write-Log "=== Temp Files Cleanup Completed ===" "SUCCESS"
     
     # Exit with appropriate code
-    if ($summary.Framework.OverallSuccess) {
+    if ($summaryObject.Success) {
         exit 0
     } else {
         exit 1
     }
     
 } catch {
-    Write-FrameworkLog "Critical framework error: $($_.Exception.Message)" "ERROR"
+    Write-Log "Critical error during cleanup: $($_.Exception.Message)" "ERROR"
+    Write-Log "Stack Trace: $($_.Exception.StackTrace)" "ERROR"
     exit 2
 }
